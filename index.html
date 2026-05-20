@@ -26,7 +26,7 @@
       line-height: 1.5;
     }
     .wrap {
-      max-width: 720px;
+      max-width: 900px;
       margin: 0 auto;
       padding: 2rem 1.25rem 3rem;
     }
@@ -146,21 +146,52 @@
     }
     #status.ok { color: var(--success); }
     #status.err { color: var(--error); }
-    #preview {
+    #tableSection {
       margin-top: 1rem;
       display: none;
     }
-    #preview pre {
-      margin: 0;
-      padding: 1rem;
-      background: var(--bg);
+    #tableSection > label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .table-wrap {
+      overflow-x: auto;
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: auto;
-      max-height: 320px;
-      font-size: 0.8rem;
-      white-space: pre-wrap;
-      word-break: break-word;
+      background: var(--bg);
+    }
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+    }
+    .data-table th,
+    .data-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.55rem 0.75rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    .data-table th {
+      background: #243044;
+      color: var(--text);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+    .data-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+    .data-table tbody tr:hover {
+      background: rgba(59, 130, 246, 0.07);
+    }
+    .data-table td:first-child {
+      color: var(--text);
+    }
+    .data-table td:last-child {
+      white-space: nowrap;
     }
     .hint {
       font-size: 0.78rem;
@@ -178,7 +209,7 @@
 <body>
   <div class="wrap">
     <h1>Загрузка аналитической карточки</h1>
-    <p class="subtitle">API: <code>analytics/custom-card</code> через Cloudflare Worker — результат можно скачать как JSON</p>
+    <p class="subtitle">API: <code>analytics/custom-card</code> — таблица и скачивание в Excel (.xlsx)</p>
 
     <section>
       <h2>Параметры запроса</h2>
@@ -224,24 +255,30 @@
       <h2>Действия</h2>
       <div class="actions">
         <button type="button" class="primary" id="btnFetch">Загрузить данные</button>
-        <button type="button" class="secondary" id="btnDownload" disabled>Скачать JSON</button>
+        <button type="button" class="secondary" id="btnDownload" disabled>Скачать XLSX</button>
         <button type="button" class="secondary" id="btnCopyUrl">Скопировать URL</button>
       </div>
       <p class="saved-note" id="savedNote"></p>
       <div id="status"></div>
-      <div id="preview">
-        <label>Предпросмотр</label>
-        <pre id="previewBody"></pre>
+      <div id="tableSection">
+        <label>Результат</label>
+        <div class="table-wrap">
+          <table class="data-table" id="dataTable">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
       </div>
     </section>
   </div>
 
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <script>
     const PROXY_BASE = "https://robotmia-analytics-proxy.a-mozzherin.workers.dev";
     const STORAGE_KEY = "analytics-custom-card-settings";
 
-    let lastPayload = null;
-    let lastFilename = "custom-card.json";
+    let lastSheetAoa = null;
+    let lastFilename = "custom-card.xlsx";
 
     function pad2(n) {
       return String(n).padStart(2, "0");
@@ -376,31 +413,100 @@
       el.className = type || "";
     }
 
-    function showPreview(data) {
-      const box = document.getElementById("preview");
-      const pre = document.getElementById("previewBody");
-      pre.textContent = typeof data === "string"
-        ? data
-        : JSON.stringify(data, null, 2);
-      box.style.display = "block";
+    function normalizeRows(data) {
+      if (Array.isArray(data)) return data;
+      if (data && typeof data === "object") {
+        if (Array.isArray(data.data)) return data.data;
+        if (Array.isArray(data.rows)) return data.rows;
+        if (Array.isArray(data.result)) return data.result;
+      }
+      throw new Error("Ответ API: ожидался массив строк (column_1, column_2…).");
     }
 
-    function downloadJson(data, filename) {
-      const blob = new Blob(
-        [typeof data === "string" ? data : JSON.stringify(data, null, 2)],
-        { type: "application/json;charset=utf-8" }
+    function getColumnKeys(rows) {
+      const keys = new Set();
+      for (const row of rows) {
+        if (!row || typeof row !== "object") continue;
+        for (const key of Object.keys(row)) {
+          if (/^column_\d+$/i.test(key)) keys.add(key);
+        }
+      }
+      if (keys.size === 0 && rows[0] && typeof rows[0] === "object") {
+        return Object.keys(rows[0]);
+      }
+      return [...keys].sort((a, b) => {
+        const na = parseInt(a.replace(/\D/g, ""), 10) || 0;
+        const nb = parseInt(b.replace(/\D/g, ""), 10) || 0;
+        return na - nb;
+      });
+    }
+
+    function rowsToSheet(rows) {
+      if (!rows.length) throw new Error("Пустой ответ: нет строк для таблицы.");
+      const cols = getColumnKeys(rows);
+      const aoa = rows.map((row) =>
+        cols.map((col) => (row[col] != null ? String(row[col]) : ""))
       );
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = filename;
-      a.click();
-      URL.revokeObjectURL(a.href);
+      return { cols, aoa };
+    }
+
+    function hideTable() {
+      document.getElementById("tableSection").style.display = "none";
+      document.getElementById("tableHead").innerHTML = "";
+      document.getElementById("tableBody").innerHTML = "";
+    }
+
+    function renderTable(aoa) {
+      if (!aoa.length) {
+        hideTable();
+        return;
+      }
+      const head = document.getElementById("tableHead");
+      const body = document.getElementById("tableBody");
+      const [header, ...dataRows] = aoa;
+
+      head.innerHTML = "<tr>" + header.map((c) =>
+        `<th>${escapeHtml(c)}</th>`
+      ).join("") + "</tr>";
+
+      body.innerHTML = dataRows.map((row) =>
+        "<tr>" + row.map((cell) =>
+          `<td>${escapeHtml(cell)}</td>`
+        ).join("") + "</tr>"
+      ).join("");
+
+      document.getElementById("tableSection").style.display = "block";
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    function downloadXlsx(aoa, filename) {
+      if (typeof XLSX === "undefined") {
+        throw new Error("Библиотека Excel не загрузилась. Обновите страницу.");
+      }
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Данные");
+      XLSX.writeFile(wb, filename);
     }
 
     function makeFilename(form) {
       const from = form.date_from.replace(/-/g, "");
       const to = form.date_to.replace(/-/g, "");
-      return `custom-card_${form.card_id}_${from}-${to}.json`;
+      return `custom-card_${form.card_id}_${from}-${to}.xlsx`;
+    }
+
+    function displayData(data) {
+      const rows = normalizeRows(data);
+      const { aoa } = rowsToSheet(rows);
+      lastSheetAoa = aoa;
+      renderTable(aoa);
     }
 
     async function fetchData() {
@@ -438,14 +544,13 @@
           throw new Error(msg);
         }
 
-        lastPayload = data;
+        displayData(data);
         lastFilename = makeFilename(form);
-        showPreview(data);
         btnDl.disabled = false;
-        setStatus("Данные получены. Можно скачать JSON.", "ok");
+        setStatus("Данные получены. Можно скачать XLSX.", "ok");
       } catch (e) {
-        lastPayload = null;
-        document.getElementById("preview").style.display = "none";
+        lastSheetAoa = null;
+        hideTable();
         const hint = e.message === "Failed to fetch"
           ? "Не удалось выполнить запрос через прокси. Проверьте Worker в Cloudflare."
           : e.message;
@@ -458,9 +563,13 @@
     document.getElementById("btnFetch").addEventListener("click", fetchData);
 
     document.getElementById("btnDownload").addEventListener("click", () => {
-      if (lastPayload == null) return;
-      downloadJson(lastPayload, lastFilename);
-      setStatus("Файл скачан: " + lastFilename, "ok");
+      if (!lastSheetAoa || !lastSheetAoa.length) return;
+      try {
+        downloadXlsx(lastSheetAoa, lastFilename);
+        setStatus("Файл скачан: " + lastFilename, "ok");
+      } catch (e) {
+        setStatus(e.message, "err");
+      }
     });
 
     document.getElementById("btnCopyUrl").addEventListener("click", async () => {
