@@ -26,7 +26,7 @@
       line-height: 1.5;
     }
     .wrap {
-      max-width: 900px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 2rem 1.25rem 3rem;
     }
@@ -34,11 +34,6 @@
       font-size: 1.35rem;
       font-weight: 600;
       margin: 0 0 1.75rem;
-    }
-    .period-caption {
-      font-size: 0.82rem;
-      color: var(--muted);
-      margin: -0.25rem 0 0.65rem;
     }
     section {
       background: var(--surface);
@@ -65,7 +60,8 @@
     input[type="password"],
     input[type="number"],
     input[type="date"],
-    input[type="time"] {
+    input[type="time"],
+    input[type="file"] {
       width: 100%;
       padding: 0.55rem 0.65rem;
       border: 1px solid var(--border);
@@ -120,6 +116,15 @@
       cursor: pointer;
     }
     button.secondary:hover { border-color: var(--accent); }
+    button.secondary:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .hint {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: -0.35rem 0 0.85rem;
+    }
     #status {
       margin-top: 1rem;
       font-size: 0.9rem;
@@ -127,15 +132,21 @@
     }
     #status.ok { color: var(--success); }
     #status.err { color: var(--error); }
-    #tableSection {
-      margin-top: 1rem;
+    #resultsSection {
       display: none;
+      margin-top: 1rem;
     }
-    #tableSection > label {
-      display: block;
-      margin-bottom: 0.5rem;
-      color: var(--muted);
-      font-size: 0.85rem;
+    .period-block {
+      margin-bottom: 1.5rem;
+    }
+    .period-block:last-child {
+      margin-bottom: 0;
+    }
+    .period-block h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 0.6rem;
+      color: var(--text);
     }
     .table-wrap {
       overflow-x: auto;
@@ -144,16 +155,24 @@
       background: var(--bg);
     }
     .data-table {
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
-      font-size: 0.88rem;
+      font-size: 0.82rem;
     }
     .data-table th,
     .data-table td {
       border-bottom: 1px solid var(--border);
-      padding: 0.55rem 0.75rem;
+      border-right: 1px solid var(--border);
+      padding: 0.45rem 0.6rem;
       text-align: left;
       vertical-align: top;
+      max-width: 220px;
+      white-space: nowrap;
+    }
+    .data-table th:last-child,
+    .data-table td:last-child {
+      border-right: none;
     }
     .data-table th {
       background: #243044;
@@ -161,29 +180,46 @@
       font-weight: 600;
       position: sticky;
       top: 0;
+      z-index: 1;
+    }
+    .data-table td:first-child,
+    .data-table th:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: #1e2a3c;
+      min-width: 140px;
+      max-width: 200px;
+      white-space: normal;
+    }
+    .data-table thead th:first-child {
+      z-index: 3;
+      background: #243044;
     }
     .data-table tbody tr:last-child td {
       border-bottom: none;
     }
-    .data-table tbody tr:hover {
-      background: rgba(59, 130, 246, 0.07);
+    .data-table tbody tr:hover td {
+      background: rgba(59, 130, 246, 0.06);
     }
-    .data-table td:first-child {
-      color: var(--text);
+    .data-table tbody tr:hover td:first-child {
+      background: #243044;
     }
-    .data-table td:last-child {
-      white-space: nowrap;
+    .data-table td.delta-up {
+      background: rgba(34, 197, 94, 0.28);
+      color: #bbf7d0;
+      font-weight: 600;
     }
-    .hint {
-      font-size: 0.78rem;
+    .data-table td.delta-down {
+      background: rgba(244, 114, 182, 0.28);
+      color: #fbcfe8;
+      font-weight: 600;
+    }
+    .data-table td.delta-zero {
       color: var(--muted);
-      margin-top: -0.5rem;
-      margin-bottom: 0.85rem;
     }
-    .saved-note {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin-top: 0.5rem;
+    .file-row {
+      margin-bottom: 0.5rem;
     }
   </style>
 </head>
@@ -192,7 +228,7 @@
     <h1>Сравнительный анализ таблиц</h1>
 
     <section>
-      <h2>Параметры</h2>
+      <h2>Параметры API</h2>
       <label for="project_id">Номер проекта</label>
       <input type="text" id="project_id" placeholder="xx" autocomplete="off">
 
@@ -248,21 +284,57 @@
     </section>
 
     <section>
-      <h2>Действия</h2>
+      <h2>Загрузка по API</h2>
       <div class="actions">
-        <button type="button" class="primary" id="btnFetch">Загрузить данные</button>
+        <button type="button" class="primary" id="btnFetch">Загрузить данные по API</button>
         <button type="button" class="secondary" id="btnDownload" disabled>Скачать XLSX</button>
-        <button type="button" class="secondary" id="btnCopyUrl">Скопировать URL</button>
       </div>
-      <p class="saved-note" id="savedNote"></p>
       <div id="status"></div>
-      <div id="tableSection">
-        <label>Сравнение</label>
-        <p class="period-caption" id="periodCaption"></p>
+    </section>
+
+    <section>
+      <h2>Загрузка из файла</h2>
+      <p class="hint">CSV или Excel (.xlsx) для каждого периода: первая строка — заголовки столбцов, далее строки со сценариями (как в выгрузке custom-table).</p>
+      <div class="file-row">
+        <label for="file_p1">Файл периода 1</label>
+        <input type="file" id="file_p1" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      </div>
+      <div class="file-row">
+        <label for="file_p2">Файл периода 2</label>
+        <input type="file" id="file_p2" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+      </div>
+      <div class="actions">
+        <button type="button" class="primary" id="btnLoadFiles">Загрузить из файлов</button>
+      </div>
+    </section>
+
+    <section id="resultsSection">
+      <h2>Результаты</h2>
+      <div class="period-block">
+        <h3 id="captionCmp">Сравнение</h3>
+        <p class="hint">Числовые ячейки: дельта (период 2 − период 1). Текст — из периода 1. Рост — зелёный, снижение — розовый.</p>
         <div class="table-wrap">
-          <table class="data-table" id="dataTable">
-            <thead id="tableHead"></thead>
-            <tbody id="tableBody"></tbody>
+          <table class="data-table">
+            <thead id="headCmp"></thead>
+            <tbody id="bodyCmp"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="period-block">
+        <h3 id="captionP1">Период 1</h3>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead id="headP1"></thead>
+            <tbody id="bodyP1"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="period-block">
+        <h3 id="captionP2">Период 2</h3>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead id="headP2"></thead>
+            <tbody id="bodyP2"></tbody>
           </table>
         </div>
       </div>
@@ -274,16 +346,15 @@
     const PROXY_BASE = "https://robotmia-analytics-proxy.a-mozzherin.workers.dev";
     const STORAGE_KEY = "analytics-custom-card-settings";
 
-    let lastSheetAoa = null;
-    let lastFilename = "custom-card.xlsx";
+    let exportWorkbook = { p1: null, p2: null, compare: null };
+    let lastFilename = "compare.xlsx";
 
     function pad2(n) {
       return String(n).padStart(2, "0");
     }
 
-    /** DD.MM.YYYY для API */
     function formatApiDate(d) {
-      return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+      return pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + "." + d.getFullYear();
     }
 
     function formatApiTimeFromInput(value) {
@@ -292,22 +363,16 @@
       const h = parts[0] || "00";
       const m = parts[1] || "00";
       const s = parts[2] || "00";
-      return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+      return pad2(h) + ":" + pad2(m) + ":" + pad2(s);
     }
 
     function toInputDate(d) {
-      return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+      return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
     }
 
     function startOfDay(d) {
       const x = new Date(d);
       x.setHours(0, 0, 0, 0);
-      return x;
-    }
-
-    function endOfDay(d) {
-      const x = new Date(d);
-      x.setHours(23, 59, 59, 999);
       return x;
     }
 
@@ -318,7 +383,6 @@
       document.getElementById("time_to_" + prefix).value = "23:59:59";
     }
 
-    /** Период 2: 7 дней до вчера; период 1: 7 дней перед периодом 2 */
     function applyDefaultPeriods() {
       const today = startOfDay(new Date());
       const p2End = new Date(today);
@@ -357,7 +421,7 @@
     function formatPeriodLabel(period) {
       const from = new Date(period.date_from + "T00:00:00");
       const to = new Date(period.date_to + "T00:00:00");
-      return formatApiDate(from) + "–" + formatApiDate(to);
+      return formatApiDate(from) + " – " + formatApiDate(to);
     }
 
     function saveSettings() {
@@ -368,11 +432,7 @@
           api_key: f.api_key,
           card_id: f.card_id,
         }));
-        document.getElementById("savedNote").textContent =
-          "Настройки сохранены в этом браузере.";
-      } catch (_) {
-        document.getElementById("savedNote").textContent = "";
-      }
+      } catch (_) {}
     }
 
     function loadSettings() {
@@ -383,8 +443,6 @@
         if (s.project_id) document.getElementById("project_id").value = s.project_id;
         if (s.api_key) document.getElementById("api_key").value = s.api_key;
         if (s.card_id) document.getElementById("card_id").value = s.card_id;
-        document.getElementById("savedNote").textContent =
-          "Загружены сохранённые настройки.";
       } catch (_) {}
     }
 
@@ -418,42 +476,45 @@
       return PROXY_BASE + "?" + params.toString();
     }
 
-    async function fetchPeriod(url) {
-      const res = await fetch(url, { method: "GET" });
-      const text = await res.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
-      }
-      if (!res.ok) {
-        const msg = typeof data === "object" && data && data.message
-          ? data.message
-          : "Ошибка " + res.status;
-        throw new Error(msg);
-      }
-      return data;
-    }
-
-    function mergeComparison(aoa1, aoa2, title1, title2) {
-      const rows1 = aoa1.slice(1);
-      const rows2 = aoa2.slice(1);
-      const max = Math.max(rows1.length, rows2.length);
-      const header = [(aoa1[0] && aoa1[0][0]) || "Показатель", title1, title2];
-      const body = [];
-      for (let i = 0; i < max; i++) {
-        const r1 = rows1[i] || ["", ""];
-        const r2 = rows2[i] || ["", ""];
-        body.push([r1[0] || r2[0] || "", r1[1] ?? "", r2[1] ?? ""]);
-      }
-      return [header, ...body];
-    }
-
     function setStatus(text, type) {
       const el = document.getElementById("status");
       el.textContent = text;
       el.className = type || "";
+    }
+
+    function trimAoa(aoa) {
+      const rows = aoa
+        .map((row) => (Array.isArray(row) ? row.map((c) => (c == null ? "" : String(c))) : []))
+        .filter((row) => row.some((cell) => String(cell).trim() !== ""));
+      if (!rows.length) return [];
+      let maxCols = 0;
+      rows.forEach((r) => { if (r.length > maxCols) maxCols = r.length; });
+      return rows.map((row) => {
+        const r = row.slice();
+        while (r.length < maxCols) r.push("");
+        while (r.length > 0 && r[r.length - 1].trim() === "") r.pop();
+        return r;
+      });
+    }
+
+    function parseUploadedFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, { type: "array", raw: false });
+            const sheet = wb.Sheets[wb.SheetNames[0]];
+            const aoa = trimAoa(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }));
+            if (!aoa.length) throw new Error("Файл пустой или не распознан.");
+            resolve(aoa);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        reader.onerror = () => reject(new Error("Не удалось прочитать файл."));
+        reader.readAsArrayBuffer(file);
+      });
     }
 
     function normalizeRows(data) {
@@ -463,7 +524,7 @@
         if (Array.isArray(data.rows)) return data.rows;
         if (Array.isArray(data.result)) return data.result;
       }
-      throw new Error("Ответ API: ожидался массив строк (column_1, column_2…).");
+      throw new Error("Ответ API: ожидался массив строк.");
     }
 
     function getColumnKeys(rows) {
@@ -484,41 +545,13 @@
       });
     }
 
-    function rowsToSheet(rows) {
-      if (!rows.length) throw new Error("Пустой ответ: нет строк для таблицы.");
+    /** API custom-card: узкая таблица «показатель — значение» */
+    function apiRowsToAoa(rows) {
+      if (!rows.length) throw new Error("Пустой ответ API.");
       const cols = getColumnKeys(rows);
-      const aoa = rows.map((row) =>
+      return rows.map((row) =>
         cols.map((col) => (row[col] != null ? String(row[col]) : ""))
       );
-      return { cols, aoa };
-    }
-
-    function hideTable() {
-      document.getElementById("tableSection").style.display = "none";
-      document.getElementById("tableHead").innerHTML = "";
-      document.getElementById("tableBody").innerHTML = "";
-    }
-
-    function renderTable(aoa) {
-      if (!aoa.length) {
-        hideTable();
-        return;
-      }
-      const head = document.getElementById("tableHead");
-      const body = document.getElementById("tableBody");
-      const [header, ...dataRows] = aoa;
-
-      head.innerHTML = "<tr>" + header.map((c) =>
-        `<th>${escapeHtml(c)}</th>`
-      ).join("") + "</tr>";
-
-      body.innerHTML = dataRows.map((row) =>
-        "<tr>" + row.map((cell) =>
-          `<td>${escapeHtml(cell)}</td>`
-        ).join("") + "</tr>"
-      ).join("");
-
-      document.getElementById("tableSection").style.display = "block";
     }
 
     function escapeHtml(s) {
@@ -529,32 +562,197 @@
         .replace(/"/g, "&quot;");
     }
 
-    function downloadXlsx(aoa, filename) {
-      if (typeof XLSX === "undefined") {
-        throw new Error("Библиотека Excel не загрузилась. Обновите страницу.");
+    function alignTables(aoa1, aoa2) {
+      const maxR = Math.max(aoa1.length, aoa2.length);
+      const maxC = Math.max(
+        0,
+        ...aoa1.map((r) => r.length),
+        ...aoa2.map((r) => r.length)
+      );
+      function pad(aoa) {
+        const out = [];
+        for (let i = 0; i < maxR; i++) {
+          const row = (aoa[i] || []).slice();
+          while (row.length < maxC) row.push("");
+          out.push(row.map((c) => (c == null ? "" : String(c))));
+        }
+        return out;
       }
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Сравнение");
-      XLSX.writeFile(wb, filename);
+      return [pad(aoa1), pad(aoa2)];
+    }
+
+    function parseNumericValue(raw) {
+      const s = String(raw).trim();
+      if (!s || s === "-" || /^nan$/i.test(s)) return null;
+      if (/[a-zA-Zа-яА-ЯёЁ]/.test(s)) return null;
+
+      const hasPercent = s.indexOf("%") >= 0;
+      let cleaned = s.replace(/\s/g, "").replace(/%/g, "");
+
+      const lastComma = cleaned.lastIndexOf(",");
+      const lastDot = cleaned.lastIndexOf(".");
+      if (lastComma >= 0 && lastDot >= 0) {
+        if (lastComma > lastDot) {
+          cleaned = cleaned.replace(/\./g, "").replace(",", ".");
+        } else {
+          cleaned = cleaned.replace(/,/g, "");
+        }
+      } else if (lastComma >= 0) {
+        const parts = cleaned.split(",");
+        if (parts.length === 2 && parts[1].length <= 2) {
+          cleaned = parts[0].replace(/\./g, "") + "." + parts[1];
+        } else {
+          cleaned = cleaned.replace(/,/g, "");
+        }
+      }
+
+      const num = parseFloat(cleaned);
+      if (Number.isNaN(num)) return null;
+      return { value: num, hasPercent: hasPercent };
+    }
+
+    function formatDelta(delta, meta1, meta2) {
+      const usePercent = meta1.hasPercent || meta2.hasPercent;
+      const abs = Math.abs(delta);
+      let formatted;
+      if (Math.abs(delta - Math.round(delta)) < 1e-9) {
+        formatted = String(Math.round(delta));
+      } else if (abs >= 10) {
+        formatted = delta.toFixed(1).replace(/\.0$/, "");
+      } else {
+        formatted = delta.toFixed(2).replace(/\.?0+$/, "");
+      }
+      if (delta > 0) formatted = "+" + formatted;
+      if (usePercent) formatted += "%";
+      return formatted;
+    }
+
+    function buildComparisonCell(v1, v2) {
+      const text1 = String(v1 ?? "").trim();
+      const n1 = parseNumericValue(text1);
+      if (!n1) {
+        return { text: text1, kind: "text" };
+      }
+      const n2 = parseNumericValue(v2);
+      if (!n2) {
+        return { text: text1, kind: "text" };
+      }
+      const delta = n2.value - n1.value;
+      const kind = delta > 0 ? "up" : delta < 0 ? "down" : "zero";
+      return { text: formatDelta(delta, n1, n2), kind: kind };
+    }
+
+    function buildComparisonAoa(aoa1, aoa2) {
+      const [t1, t2] = alignTables(aoa1, aoa2);
+      return t1.map((row, ri) =>
+        row.map((cell, ci) => buildComparisonCell(cell, t2[ri][ci]))
+      );
+    }
+
+    function comparisonToAoa(cells) {
+      return cells.map((row) => row.map((c) => c.text));
+    }
+
+    function renderPeriodTable(headId, bodyId, aoa) {
+      const head = document.getElementById(headId);
+      const body = document.getElementById(bodyId);
+      if (!aoa.length) {
+        head.innerHTML = "";
+        body.innerHTML = "";
+        return;
+      }
+      const [header, ...dataRows] = aoa;
+      head.innerHTML = "<tr>" + header.map((c) =>
+        "<th>" + escapeHtml(c) + "</th>"
+      ).join("") + "</tr>";
+      body.innerHTML = dataRows.map((row) =>
+        "<tr>" + row.map((cell) =>
+          "<td>" + escapeHtml(cell) + "</td>"
+        ).join("") + "</tr>"
+      ).join("");
+    }
+
+    function renderComparisonTable(cells) {
+      const head = document.getElementById("headCmp");
+      const body = document.getElementById("bodyCmp");
+      if (!cells.length) {
+        head.innerHTML = "";
+        body.innerHTML = "";
+        return;
+      }
+      const [headerCells, ...dataCells] = cells;
+      head.innerHTML = "<tr>" + headerCells.map((c) =>
+        "<th>" + escapeHtml(c.text) + "</th>"
+      ).join("") + "</tr>";
+      body.innerHTML = dataCells.map((row) =>
+        "<tr>" + row.map((c) => {
+          const cls = c.kind === "up" ? "delta-up"
+            : c.kind === "down" ? "delta-down"
+            : c.kind === "zero" ? "delta-zero"
+            : "";
+          return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(c.text) + "</td>";
+        }).join("") + "</tr>"
+      ).join("");
+    }
+
+    function hideResults() {
+      document.getElementById("resultsSection").style.display = "none";
+      exportWorkbook = { p1: null, p2: null, compare: null };
+      document.getElementById("btnDownload").disabled = true;
+    }
+
+    function displayResults(aoa1, aoa2, captionCmp, caption1, caption2) {
+      const comparisonCells = buildComparisonAoa(aoa1, aoa2);
+      exportWorkbook = {
+        p1: aoa1,
+        p2: aoa2,
+        compare: comparisonToAoa(comparisonCells),
+      };
+      document.getElementById("captionCmp").textContent = captionCmp;
+      document.getElementById("captionP1").textContent = caption1;
+      document.getElementById("captionP2").textContent = caption2;
+      renderComparisonTable(comparisonCells);
+      renderPeriodTable("headP1", "bodyP1", aoa1);
+      renderPeriodTable("headP2", "bodyP2", aoa2);
+      document.getElementById("resultsSection").style.display = "block";
+      document.getElementById("btnDownload").disabled = false;
     }
 
     function makeFilename(form) {
       const p1 = form.period1.date_from.replace(/-/g, "") + "-" + form.period1.date_to.replace(/-/g, "");
       const p2 = form.period2.date_from.replace(/-/g, "") + "-" + form.period2.date_to.replace(/-/g, "");
-      return "compare_" + form.card_id + "_p1_" + p1 + "_p2_" + p2 + ".xlsx";
+      const card = form.card_id ? form.card_id + "_" : "";
+      return "compare_" + card + "p1_" + p1 + "_p2_" + p2 + ".xlsx";
     }
 
-    function displayComparison(data1, data2, form) {
-      const aoa1 = rowsToSheet(normalizeRows(data1)).aoa;
-      const aoa2 = rowsToSheet(normalizeRows(data2)).aoa;
-      const label1 = "Период 1 (" + formatPeriodLabel(form.period1) + ")";
-      const label2 = "Период 2 (" + formatPeriodLabel(form.period2) + ")";
-      const merged = mergeComparison(aoa1, aoa2, label1, label2);
-      lastSheetAoa = merged;
-      document.getElementById("periodCaption").textContent =
-        label1 + " · " + label2;
-      renderTable(merged);
+    function downloadXlsx() {
+      if (typeof XLSX === "undefined") {
+        throw new Error("Библиотека Excel не загрузилась. Обновите страницу.");
+      }
+      if (!exportWorkbook.p1 || !exportWorkbook.p2) return;
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportWorkbook.compare), "Сравнение");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportWorkbook.p1), "Период 1");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(exportWorkbook.p2), "Период 2");
+      XLSX.writeFile(wb, lastFilename);
+    }
+
+    async function fetchPeriod(url) {
+      const res = await fetch(url, { method: "GET" });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const msg = typeof data === "object" && data && data.message
+          ? data.message
+          : "Ошибка " + res.status;
+        throw new Error(msg);
+      }
+      return data;
     }
 
     async function fetchData() {
@@ -572,9 +770,8 @@
       }
 
       const btn = document.getElementById("btnFetch");
-      const btnDl = document.getElementById("btnDownload");
       btn.disabled = true;
-      btnDl.disabled = true;
+      document.getElementById("btnDownload").disabled = true;
       setStatus("Загрузка периода 1 и периода 2…", "");
 
       try {
@@ -583,14 +780,17 @@
           fetchPeriod(url2),
         ]);
 
-        displayComparison(data1, data2, form);
+        const aoa1 = apiRowsToAoa(normalizeRows(data1));
+        const aoa2 = apiRowsToAoa(normalizeRows(data2));
+        const capCmp = "Сравнение (дельта: период 2 − период 1)";
+        const cap1 = "Исходные данные — период 1 (" + formatPeriodLabel(form.period1) + ")";
+        const cap2 = "Исходные данные — период 2 (" + formatPeriodLabel(form.period2) + ")";
+
+        displayResults(aoa1, aoa2, capCmp, cap1, cap2);
         lastFilename = makeFilename(form);
-        btnDl.disabled = false;
-        setStatus("Сравнение готово. Можно скачать XLSX.", "ok");
+        setStatus("Данные загружены: сравнение и две исходные таблицы. Можно скачать XLSX.", "ok");
       } catch (e) {
-        lastSheetAoa = null;
-        hideTable();
-        document.getElementById("periodCaption").textContent = "";
+        hideResults();
         const hint = e.message === "Failed to fetch"
           ? "Не удалось выполнить запрос через прокси. Проверьте Worker в Cloudflare."
           : e.message;
@@ -600,27 +800,49 @@
       }
     }
 
-    document.getElementById("btnFetch").addEventListener("click", fetchData);
-
-    document.getElementById("btnDownload").addEventListener("click", () => {
-      if (!lastSheetAoa || !lastSheetAoa.length) return;
-      try {
-        downloadXlsx(lastSheetAoa, lastFilename);
-        setStatus("Файл скачан: " + lastFilename, "ok");
-      } catch (e) {
-        setStatus(e.message, "err");
+    async function loadFromFiles() {
+      const file1 = document.getElementById("file_p1").files[0];
+      const file2 = document.getElementById("file_p2").files[0];
+      if (!file1 || !file2) {
+        setStatus("Выберите файл для периода 1 и периода 2.", "err");
+        return;
       }
-    });
 
-    document.getElementById("btnCopyUrl").addEventListener("click", async () => {
+      const form = readForm();
+      const btn = document.getElementById("btnLoadFiles");
+      btn.disabled = true;
+      document.getElementById("btnDownload").disabled = true;
+      setStatus("Чтение файлов…", "");
+
       try {
-        const form = readForm();
-        const url1 = buildUrl(form, form.period1, "Период 1");
-        const url2 = buildUrl(form, form.period2, "Период 2");
-        await navigator.clipboard.writeText(
-          "Период 1:\n" + url1 + "\n\nПериод 2:\n" + url2
-        );
-        setStatus("URL обоих периодов скопированы.", "ok");
+        validatePeriod(form.period1, "Период 1");
+        validatePeriod(form.period2, "Период 2");
+        const [aoa1, aoa2] = await Promise.all([
+          parseUploadedFile(file1),
+          parseUploadedFile(file2),
+        ]);
+
+        const capCmp = "Сравнение (дельта: период 2 − период 1)";
+        const cap1 = "Исходные данные — период 1 (" + formatPeriodLabel(form.period1) + ") — " + file1.name;
+        const cap2 = "Исходные данные — период 2 (" + formatPeriodLabel(form.period2) + ") — " + file2.name;
+
+        displayResults(aoa1, aoa2, capCmp, cap1, cap2);
+        lastFilename = makeFilename(form);
+        setStatus("Файлы загружены: сравнение и две исходные таблицы. Можно скачать XLSX.", "ok");
+      } catch (e) {
+        hideResults();
+        setStatus(e.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    document.getElementById("btnFetch").addEventListener("click", fetchData);
+    document.getElementById("btnLoadFiles").addEventListener("click", loadFromFiles);
+    document.getElementById("btnDownload").addEventListener("click", () => {
+      try {
+        downloadXlsx();
+        setStatus("Файл скачан: " + lastFilename, "ok");
       } catch (e) {
         setStatus(e.message, "err");
       }
