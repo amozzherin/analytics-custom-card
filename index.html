@@ -178,7 +178,7 @@
 <body>
   <div class="wrap">
     <h1>Загрузка аналитической карточки</h1>
-    <p class="subtitle">API: <code>analytics/custom-card</code> — результат можно скачать как JSON</p>
+    <p class="subtitle">API: <code>analytics/custom-card</code> через Cloudflare Worker — результат можно скачать как JSON</p>
 
     <section>
       <h2>Параметры запроса</h2>
@@ -237,7 +237,7 @@
   </div>
 
   <script>
-    const API_BASE = "https://go.robotmia.ru/api/analytics/custom-card";
+    const PROXY_BASE = "https://robotmia-analytics-proxy.a-mozzherin.workers.dev";
     const STORAGE_KEY = "analytics-custom-card-settings";
 
     let lastPayload = null;
@@ -367,7 +367,7 @@
       params.set("date_range[date_to]", formatApiDate(to));
       params.set("date_range[time_to]", formatApiTimeFromInput(form.time_to));
 
-      return API_BASE + "?" + params.toString();
+      return PROXY_BASE + "?" + params.toString();
     }
 
     function setStatus(text, type) {
@@ -447,7 +447,7 @@
         lastPayload = null;
         document.getElementById("preview").style.display = "none";
         const hint = e.message === "Failed to fetch"
-          ? "Не удалось выполнить запрос (CORS или сеть). Откройте файл через локальный сервер или расширение CORS, либо скопируйте URL и откройте в новой вкладке."
+          ? "Не удалось выполнить запрос через прокси. Проверьте Worker в Cloudflare."
           : e.message;
         setStatus(hint, "err");
       } finally {
@@ -465,9 +465,13 @@
 
     document.getElementById("btnCopyUrl").addEventListener("click", async () => {
       try {
-        const url = buildUrl(readForm());
+        const form = readForm();
+        if (!form.project_id || !form.api_key || !form.card_id) {
+          throw new Error("Заполните project_id, api_key и card_id.");
+        }
+        const url = buildUrl(form);
         await navigator.clipboard.writeText(url);
-        setStatus("URL скопирован в буфер обмена.", "ok");
+        setStatus("URL запроса скопирован (можно открыть в новой вкладке).", "ok");
       } catch (e) {
         setStatus(e.message, "err");
       }
