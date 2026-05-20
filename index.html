@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Аналитика — custom-card</title>
+  <title>Сравнительный анализ таблиц</title>
   <style>
     :root {
       --bg: #0f1419;
@@ -33,12 +33,12 @@
     h1 {
       font-size: 1.35rem;
       font-weight: 600;
-      margin: 0 0 0.35rem;
+      margin: 0 0 1.75rem;
     }
-    .subtitle {
+    .period-caption {
+      font-size: 0.82rem;
       color: var(--muted);
-      font-size: 0.9rem;
-      margin-bottom: 1.75rem;
+      margin: -0.25rem 0 0.65rem;
     }
     section {
       background: var(--surface);
@@ -89,25 +89,6 @@
     }
     .range-grid label { margin-bottom: 0.25rem; }
     .range-grid input { margin-bottom: 0; }
-    .preset-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 0.75rem;
-    }
-    .preset-row button {
-      padding: 0.35rem 0.65rem;
-      font-size: 0.8rem;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      background: var(--bg);
-      color: var(--muted);
-      cursor: pointer;
-    }
-    .preset-row button:hover {
-      border-color: var(--accent);
-      color: var(--text);
-    }
     .actions {
       display: flex;
       flex-wrap: wrap;
@@ -208,46 +189,61 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Загрузка аналитической карточки</h1>
-    <p class="subtitle">API: <code>analytics/custom-card</code> — таблица и скачивание в Excel (.xlsx)</p>
+    <h1>Сравнительный анализ таблиц</h1>
 
     <section>
-      <h2>Параметры запроса</h2>
-      <label for="project_id">project_id</label>
+      <h2>Параметры</h2>
+      <label for="project_id">Номер проекта</label>
       <input type="text" id="project_id" placeholder="xx" autocomplete="off">
 
       <label for="api_key">api_key</label>
       <input type="password" id="api_key" placeholder="ключ API" autocomplete="off">
-      <p class="hint">Ключ хранится только в браузере (localStorage), пока вы не очистите данные.</p>
 
-      <label for="card_id">card_id</label>
+      <label for="card_id">Номер карты</label>
       <input type="number" id="card_id" min="1" step="1" placeholder="1">
     </section>
 
     <section>
-      <h2>Период</h2>
+      <h2>Период 1</h2>
       <div class="range-grid">
         <div>
-          <label for="date_from">Дата начала</label>
-          <input type="date" id="date_from">
+          <label for="date_from_p1">Дата начала</label>
+          <input type="date" id="date_from_p1">
         </div>
         <div>
-          <label for="time_from">Время начала</label>
-          <input type="time" id="time_from" step="1">
+          <label for="time_from_p1">Время начала</label>
+          <input type="time" id="time_from_p1" step="1">
         </div>
         <div>
-          <label for="date_to">Дата окончания</label>
-          <input type="date" id="date_to">
+          <label for="date_to_p1">Дата окончания</label>
+          <input type="date" id="date_to_p1">
         </div>
         <div>
-          <label for="time_to">Время окончания</label>
-          <input type="time" id="time_to" step="1">
+          <label for="time_to_p1">Время окончания</label>
+          <input type="time" id="time_to_p1" step="1">
         </div>
       </div>
-      <div class="preset-row">
-        <button type="button" data-preset="yesterday">Вчера</button>
-        <button type="button" data-preset="today">Сегодня</button>
-        <button type="button" data-preset="last7">7 дней</button>
+    </section>
+
+    <section>
+      <h2>Период 2</h2>
+      <div class="range-grid">
+        <div>
+          <label for="date_from_p2">Дата начала</label>
+          <input type="date" id="date_from_p2">
+        </div>
+        <div>
+          <label for="time_from_p2">Время начала</label>
+          <input type="time" id="time_from_p2" step="1">
+        </div>
+        <div>
+          <label for="date_to_p2">Дата окончания</label>
+          <input type="date" id="date_to_p2">
+        </div>
+        <div>
+          <label for="time_to_p2">Время окончания</label>
+          <input type="time" id="time_to_p2" step="1">
+        </div>
       </div>
     </section>
 
@@ -261,7 +257,8 @@
       <p class="saved-note" id="savedNote"></p>
       <div id="status"></div>
       <div id="tableSection">
-        <label>Результат</label>
+        <label>Сравнение</label>
+        <p class="period-caption" id="periodCaption"></p>
         <div class="table-wrap">
           <table class="data-table" id="dataTable">
             <thead id="tableHead"></thead>
@@ -314,31 +311,37 @@
       return x;
     }
 
-    function setRange(fromDate, toDate) {
-      document.getElementById("date_from").value = toInputDate(fromDate);
-      document.getElementById("time_from").value = "00:00:00";
-      document.getElementById("date_to").value = toInputDate(toDate);
-      document.getElementById("time_to").value = "23:59:59";
+    function setPeriodRange(prefix, fromDate, toDate) {
+      document.getElementById("date_from_" + prefix).value = toInputDate(fromDate);
+      document.getElementById("time_from_" + prefix).value = "00:00:00";
+      document.getElementById("date_to_" + prefix).value = toInputDate(toDate);
+      document.getElementById("time_to_" + prefix).value = "23:59:59";
     }
 
-    function applyPreset(name) {
-      const now = new Date();
-      const today = startOfDay(now);
-      if (name === "yesterday") {
-        const y = new Date(today);
-        y.setDate(y.getDate() - 1);
-        setRange(y, y);
-        return;
-      }
-      if (name === "today") {
-        setRange(today, today);
-        return;
-      }
-      if (name === "last7") {
-        const from = new Date(today);
-        from.setDate(from.getDate() - 6);
-        setRange(from, today);
-      }
+    /** Период 2: 7 дней до вчера; период 1: 7 дней перед периодом 2 */
+    function applyDefaultPeriods() {
+      const today = startOfDay(new Date());
+      const p2End = new Date(today);
+      p2End.setDate(p2End.getDate() - 1);
+      const p2Start = new Date(p2End);
+      p2Start.setDate(p2Start.getDate() - 6);
+
+      const p1End = new Date(p2Start);
+      p1End.setDate(p1End.getDate() - 1);
+      const p1Start = new Date(p1End);
+      p1Start.setDate(p1Start.getDate() - 6);
+
+      setPeriodRange("p1", p1Start, p1End);
+      setPeriodRange("p2", p2Start, p2End);
+    }
+
+    function readPeriodFields(prefix) {
+      return {
+        date_from: document.getElementById("date_from_" + prefix).value,
+        time_from: document.getElementById("time_from_" + prefix).value,
+        date_to: document.getElementById("date_to_" + prefix).value,
+        time_to: document.getElementById("time_to_" + prefix).value,
+      };
     }
 
     function readForm() {
@@ -346,11 +349,15 @@
         project_id: document.getElementById("project_id").value.trim(),
         api_key: document.getElementById("api_key").value.trim(),
         card_id: document.getElementById("card_id").value.trim(),
-        date_from: document.getElementById("date_from").value,
-        time_from: document.getElementById("time_from").value,
-        date_to: document.getElementById("date_to").value,
-        time_to: document.getElementById("time_to").value,
+        period1: readPeriodFields("p1"),
+        period2: readPeriodFields("p2"),
       };
+    }
+
+    function formatPeriodLabel(period) {
+      const from = new Date(period.date_from + "T00:00:00");
+      const to = new Date(period.date_to + "T00:00:00");
+      return formatApiDate(from) + "–" + formatApiDate(to);
     }
 
     function saveSettings() {
@@ -362,7 +369,7 @@
           card_id: f.card_id,
         }));
         document.getElementById("savedNote").textContent =
-          "project_id, api_key и card_id сохранены в этом браузере.";
+          "Настройки сохранены в этом браузере.";
       } catch (_) {
         document.getElementById("savedNote").textContent = "";
       }
@@ -377,34 +384,70 @@
         if (s.api_key) document.getElementById("api_key").value = s.api_key;
         if (s.card_id) document.getElementById("card_id").value = s.card_id;
         document.getElementById("savedNote").textContent =
-          "Загружены сохранённые project_id, api_key и card_id.";
+          "Загружены сохранённые настройки.";
       } catch (_) {}
     }
 
-    function buildUrl(form) {
-      if (!form.project_id || !form.api_key || !form.card_id) {
-        throw new Error("Заполните project_id, api_key и card_id.");
+    function validatePeriod(period, label) {
+      if (!period.date_from || !period.date_to) {
+        throw new Error(label + ": укажите даты начала и окончания.");
       }
-      if (!form.date_from || !form.date_to) {
-        throw new Error("Укажите даты начала и окончания.");
-      }
-
-      const from = new Date(form.date_from + "T" + (form.time_from || "00:00"));
-      const to = new Date(form.date_to + "T" + (form.time_to || "23:59"));
+      const from = new Date(period.date_from + "T" + (period.time_from || "00:00"));
+      const to = new Date(period.date_to + "T" + (period.time_to || "23:59"));
       if (from > to) {
-        throw new Error("Дата/время начала не может быть позже окончания.");
+        throw new Error(label + ": дата начала не может быть позже окончания.");
       }
+      return { from, to };
+    }
+
+    function buildUrl(form, period, label) {
+      if (!form.project_id || !form.api_key || !form.card_id) {
+        throw new Error("Заполните номер проекта, api_key и номер карты.");
+      }
+      const { from, to } = validatePeriod(period, label);
 
       const params = new URLSearchParams();
       params.set("project_id", form.project_id);
       params.set("api_key", form.api_key);
       params.set("card_id", form.card_id);
       params.set("date_range[date_from]", formatApiDate(from));
-      params.set("date_range[time_from]", formatApiTimeFromInput(form.time_from));
+      params.set("date_range[time_from]", formatApiTimeFromInput(period.time_from));
       params.set("date_range[date_to]", formatApiDate(to));
-      params.set("date_range[time_to]", formatApiTimeFromInput(form.time_to));
+      params.set("date_range[time_to]", formatApiTimeFromInput(period.time_to));
 
       return PROXY_BASE + "?" + params.toString();
+    }
+
+    async function fetchPeriod(url) {
+      const res = await fetch(url, { method: "GET" });
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = text;
+      }
+      if (!res.ok) {
+        const msg = typeof data === "object" && data && data.message
+          ? data.message
+          : "Ошибка " + res.status;
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function mergeComparison(aoa1, aoa2, title1, title2) {
+      const rows1 = aoa1.slice(1);
+      const rows2 = aoa2.slice(1);
+      const max = Math.max(rows1.length, rows2.length);
+      const header = [(aoa1[0] && aoa1[0][0]) || "Показатель", title1, title2];
+      const body = [];
+      for (let i = 0; i < max; i++) {
+        const r1 = rows1[i] || ["", ""];
+        const r2 = rows2[i] || ["", ""];
+        body.push([r1[0] || r2[0] || "", r1[1] ?? "", r2[1] ?? ""]);
+      }
+      return [header, ...body];
     }
 
     function setStatus(text, type) {
@@ -492,30 +535,37 @@
       }
       const ws = XLSX.utils.aoa_to_sheet(aoa);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Данные");
+      XLSX.utils.book_append_sheet(wb, ws, "Сравнение");
       XLSX.writeFile(wb, filename);
     }
 
     function makeFilename(form) {
-      const from = form.date_from.replace(/-/g, "");
-      const to = form.date_to.replace(/-/g, "");
-      return `custom-card_${form.card_id}_${from}-${to}.xlsx`;
+      const p1 = form.period1.date_from.replace(/-/g, "") + "-" + form.period1.date_to.replace(/-/g, "");
+      const p2 = form.period2.date_from.replace(/-/g, "") + "-" + form.period2.date_to.replace(/-/g, "");
+      return "compare_" + form.card_id + "_p1_" + p1 + "_p2_" + p2 + ".xlsx";
     }
 
-    function displayData(data) {
-      const rows = normalizeRows(data);
-      const { aoa } = rowsToSheet(rows);
-      lastSheetAoa = aoa;
-      renderTable(aoa);
+    function displayComparison(data1, data2, form) {
+      const aoa1 = rowsToSheet(normalizeRows(data1)).aoa;
+      const aoa2 = rowsToSheet(normalizeRows(data2)).aoa;
+      const label1 = "Период 1 (" + formatPeriodLabel(form.period1) + ")";
+      const label2 = "Период 2 (" + formatPeriodLabel(form.period2) + ")";
+      const merged = mergeComparison(aoa1, aoa2, label1, label2);
+      lastSheetAoa = merged;
+      document.getElementById("periodCaption").textContent =
+        label1 + " · " + label2;
+      renderTable(merged);
     }
 
     async function fetchData() {
       const form = readForm();
       saveSettings();
 
-      let url;
+      let url1;
+      let url2;
       try {
-        url = buildUrl(form);
+        url1 = buildUrl(form, form.period1, "Период 1");
+        url2 = buildUrl(form, form.period2, "Период 2");
       } catch (e) {
         setStatus(e.message, "err");
         return;
@@ -525,32 +575,22 @@
       const btnDl = document.getElementById("btnDownload");
       btn.disabled = true;
       btnDl.disabled = true;
-      setStatus("Загрузка…", "");
+      setStatus("Загрузка периода 1 и периода 2…", "");
 
       try {
-        const res = await fetch(url, { method: "GET" });
-        const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          data = text;
-        }
+        const [data1, data2] = await Promise.all([
+          fetchPeriod(url1),
+          fetchPeriod(url2),
+        ]);
 
-        if (!res.ok) {
-          const msg = typeof data === "object" && data && data.message
-            ? data.message
-            : `Ошибка ${res.status}`;
-          throw new Error(msg);
-        }
-
-        displayData(data);
+        displayComparison(data1, data2, form);
         lastFilename = makeFilename(form);
         btnDl.disabled = false;
-        setStatus("Данные получены. Можно скачать XLSX.", "ok");
+        setStatus("Сравнение готово. Можно скачать XLSX.", "ok");
       } catch (e) {
         lastSheetAoa = null;
         hideTable();
+        document.getElementById("periodCaption").textContent = "";
         const hint = e.message === "Failed to fetch"
           ? "Не удалось выполнить запрос через прокси. Проверьте Worker в Cloudflare."
           : e.message;
@@ -575,26 +615,22 @@
     document.getElementById("btnCopyUrl").addEventListener("click", async () => {
       try {
         const form = readForm();
-        if (!form.project_id || !form.api_key || !form.card_id) {
-          throw new Error("Заполните project_id, api_key и card_id.");
-        }
-        const url = buildUrl(form);
-        await navigator.clipboard.writeText(url);
-        setStatus("URL запроса скопирован (можно открыть в новой вкладке).", "ok");
+        const url1 = buildUrl(form, form.period1, "Период 1");
+        const url2 = buildUrl(form, form.period2, "Период 2");
+        await navigator.clipboard.writeText(
+          "Период 1:\n" + url1 + "\n\nПериод 2:\n" + url2
+        );
+        setStatus("URL обоих периодов скопированы.", "ok");
       } catch (e) {
         setStatus(e.message, "err");
       }
-    });
-
-    document.querySelectorAll("[data-preset]").forEach((btn) => {
-      btn.addEventListener("click", () => applyPreset(btn.dataset.preset));
     });
 
     ["project_id", "api_key", "card_id"].forEach((id) => {
       document.getElementById(id).addEventListener("change", saveSettings);
     });
 
-    applyPreset("yesterday");
+    applyDefaultPeriods();
     loadSettings();
   </script>
 </body>
