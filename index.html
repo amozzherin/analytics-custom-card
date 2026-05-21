@@ -227,7 +227,7 @@
       margin-bottom: 1.75rem;
       display: flex;
       flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       width: 100%;
       min-height: 0;
     }
@@ -241,6 +241,7 @@
       justify-content: space-between;
       gap: 0.65rem;
       margin-bottom: 0.6rem;
+      width: 100%;
     }
     .block-header h3 {
       font-size: 0.95rem;
@@ -463,7 +464,7 @@
       </div>
   </section>
 
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
   <script>
     const PROXY_BASE = "https://robotmia-analytics-proxy.a-mozzherin.workers.dev";
     const STORAGE_KEY = "analytics-custom-card-settings";
@@ -859,7 +860,7 @@
       exportWorkbook = {
         p1: aoa1,
         p2: aoa2,
-        compare: comparisonToAoa(comparisonCells),
+        compare: comparisonCells,
       };
       document.getElementById("captionCmp").textContent = captionCmp;
       document.getElementById("captionP1").textContent = caption1;
@@ -886,20 +887,86 @@
       return cell;
     }
 
-    function prepareComparisonForExport(aoa) {
-      return aoa.map((row) => row.map((cell) => stripLeadingPlus(cell)));
+    function isNumericLikeCell(cell) {
+      const s = String(cell).trim();
+      if (!s) return false;
+      return /^[\d\s.,+%\-]+$/.test(s);
     }
 
-    function downloadSingleSheet(aoa, sheetLabel, suffix) {
+    function formatCellForExport(cell) {
+      let s = stripLeadingPlus(cell);
+      s = String(s);
+      if (!isNumericLikeCell(s)) return s;
+      return s.replace(/\./g, ",");
+    }
+
+    function prepareComparisonForExport(cells) {
+      return cells.map((row) =>
+        row.map((c) => formatCellForExport(typeof c === "object" && c && "text" in c ? c.text : c))
+      );
+    }
+
+    function comparisonCellStyle(kind) {
+      const border = {
+        top: { style: "thin", color: { rgb: "FFC5CED9" } },
+        bottom: { style: "thin", color: { rgb: "FFC5CED9" } },
+        left: { style: "thin", color: { rgb: "FFC5CED9" } },
+        right: { style: "thin", color: { rgb: "FFC5CED9" } },
+      };
+      if (kind === "up") {
+        return {
+          fill: { patternType: "solid", fgColor: { rgb: "FFBBF7D0" } },
+          font: { color: { rgb: "FF15803D" }, bold: true },
+          border: border,
+        };
+      }
+      if (kind === "down") {
+        return {
+          fill: { patternType: "solid", fgColor: { rgb: "FFFBCFE8" } },
+          font: { color: { rgb: "FFBE185D" }, bold: true },
+          border: border,
+        };
+      }
+      if (kind === "zero") {
+        return {
+          font: { color: { rgb: "FF8B9CB3" } },
+          border: border,
+        };
+      }
+      return { border: border };
+    }
+
+    function applyComparisonSheetStyles(ws, cells) {
+      cells.forEach((row, ri) => {
+        row.forEach((cell, ci) => {
+          const addr = XLSX.utils.encode_cell({ r: ri, c: ci });
+          if (!ws[addr]) return;
+          const kind = cell && typeof cell === "object" ? cell.kind : null;
+          if (kind === "up" || kind === "down" || kind === "zero") {
+            ws[addr].s = comparisonCellStyle(kind);
+          }
+        });
+      });
+    }
+
+    function downloadSingleSheet(data, sheetLabel, suffix) {
       if (typeof XLSX === "undefined") {
         throw new Error("Библиотека Excel не загрузилась. Обновите страницу.");
       }
-      if (!aoa || !aoa.length) return;
-      const data = suffix === "comparison" ? prepareComparisonForExport(aoa) : aoa;
+      if (!data || !data.length) return;
       const form = readForm();
       const filename = makeFilenameBase(form) + "_" + suffix + ".xlsx";
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), sheetLabel);
+      let ws;
+      if (suffix === "comparison") {
+        const aoa = prepareComparisonForExport(data);
+        ws = XLSX.utils.aoa_to_sheet(aoa);
+        applyComparisonSheetStyles(ws, data);
+      } else {
+        const aoa = data.map((row) => row.map((cell) => formatCellForExport(cell)));
+        ws = XLSX.utils.aoa_to_sheet(aoa);
+      }
+      XLSX.utils.book_append_sheet(wb, ws, sheetLabel);
       XLSX.writeFile(wb, filename);
       return filename;
     }
