@@ -264,21 +264,14 @@
       width: max-content;
       border-collapse: collapse;
       font-size: 0.82rem;
+      table-layout: auto;
     }
     .data-table th,
     .data-table td {
       border-bottom: 1px solid var(--border);
       border-right: 1px solid var(--border);
-      padding: 0.45rem 0.6rem;
-      text-align: left;
+      padding: 0.4rem 0.5rem;
       vertical-align: top;
-      max-width: min(280px, 40vw);
-      white-space: nowrap;
-    }
-    .data-table td:first-child,
-    .data-table th:first-child {
-      white-space: normal;
-      max-width: min(220px, 35vw);
     }
     .data-table th:last-child,
     .data-table td:last-child {
@@ -291,6 +284,45 @@
       position: sticky;
       top: 0;
       z-index: 1;
+      font-size: 0.78rem;
+      line-height: 1.35;
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      hyphens: auto;
+      padding: 0.55rem 0.45rem;
+      vertical-align: bottom;
+    }
+    .data-table th.col-label,
+    .data-table td.col-label {
+      text-align: left;
+      white-space: normal;
+      line-height: 1.4;
+      min-width: 11rem;
+      max-width: min(300px, 42vw);
+      padding-left: 0.65rem;
+      padding-right: 0.65rem;
+    }
+    .data-table th.col-metric,
+    .data-table td.col-metric {
+      text-align: right;
+      white-space: nowrap;
+      width: 1%;
+      max-width: 7.5rem;
+      padding: 0.35rem 0.45rem;
+      font-variant-numeric: tabular-nums;
+    }
+    .data-table th.col-metric {
+      text-align: center;
+      max-width: 6.5rem;
+      min-width: 3.25rem;
+      font-size: 0.76rem;
+      line-height: 1.3;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+    .data-table td.col-metric {
+      font-size: 0.8rem;
     }
     .data-table td:first-child,
     .data-table th:first-child {
@@ -298,7 +330,6 @@
       left: 0;
       z-index: 2;
       background: var(--table-sticky-col);
-      min-width: auto;
     }
     .data-table thead th:first-child {
       z-index: 3;
@@ -801,6 +832,38 @@
       return cells.map((row) => row.map((c) => c.text));
     }
 
+    function isNumericLikeDisplay(value) {
+      const s = String(value ?? "").trim();
+      if (!s || s === "-") return false;
+      return /^[\d\s.,+%\-+]+$/.test(s);
+    }
+
+    /** Колонки с числами/процентами — компактная вёрстка; первая колонка всегда подписи */
+    function detectMetricColumns(rows) {
+      if (!rows.length) return [];
+      const colCount = Math.max(...rows.map((r) => r.length));
+      const flags = new Array(colCount).fill(false);
+      for (let c = 1; c < colCount; c++) {
+        let numeric = 0;
+        let total = 0;
+        for (const row of rows) {
+          const v = row[c];
+          if (v == null || String(v).trim() === "") continue;
+          total++;
+          const text = typeof v === "object" && v && "text" in v ? v.text : v;
+          if (isNumericLikeDisplay(text)) numeric++;
+        }
+        flags[c] = total > 0 && numeric / total >= 0.55;
+      }
+      return flags;
+    }
+
+    function colClass(ci, metricCols) {
+      if (ci === 0) return "col-label";
+      if (metricCols[ci]) return "col-metric";
+      return "";
+    }
+
     function renderPeriodTable(headId, bodyId, aoa) {
       const head = document.getElementById(headId);
       const body = document.getElementById(bodyId);
@@ -810,13 +873,16 @@
         return;
       }
       const [header, ...dataRows] = aoa;
-      head.innerHTML = "<tr>" + header.map((c) =>
-        "<th>" + escapeHtml(c) + "</th>"
-      ).join("") + "</tr>";
+      const metricCols = detectMetricColumns(dataRows);
+      head.innerHTML = "<tr>" + header.map((c, ci) => {
+        const cls = colClass(ci, metricCols);
+        return "<th" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(c) + "</th>";
+      }).join("") + "</tr>";
       body.innerHTML = dataRows.map((row) =>
-        "<tr>" + row.map((cell) =>
-          "<td>" + escapeHtml(cell) + "</td>"
-        ).join("") + "</tr>"
+        "<tr>" + row.map((cell, ci) => {
+          const cls = colClass(ci, metricCols);
+          return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(cell) + "</td>";
+        }).join("") + "</tr>"
       ).join("");
     }
 
@@ -829,15 +895,19 @@
         return;
       }
       const [headerCells, ...dataCells] = cells;
-      head.innerHTML = "<tr>" + headerCells.map((c) =>
-        "<th>" + escapeHtml(c.text) + "</th>"
-      ).join("") + "</tr>";
+      const metricCols = detectMetricColumns(dataCells);
+      head.innerHTML = "<tr>" + headerCells.map((c, ci) => {
+        const parts = [colClass(ci, metricCols)].filter(Boolean);
+        const cls = parts.join(" ");
+        return "<th" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(c.text) + "</th>";
+      }).join("") + "</tr>";
       body.innerHTML = dataCells.map((row) =>
-        "<tr>" + row.map((c) => {
-          const cls = c.kind === "up" ? "delta-up"
-            : c.kind === "down" ? "delta-down"
-            : c.kind === "zero" ? "delta-zero"
-            : "";
+        "<tr>" + row.map((c, ci) => {
+          const parts = [colClass(ci, metricCols)];
+          if (c.kind === "up") parts.push("delta-up");
+          else if (c.kind === "down") parts.push("delta-down");
+          else if (c.kind === "zero") parts.push("delta-zero");
+          const cls = parts.filter(Boolean).join(" ");
           return "<td" + (cls ? ' class="' + cls + '"' : "") + ">" + escapeHtml(c.text) + "</td>";
         }).join("") + "</tr>"
       ).join("");
